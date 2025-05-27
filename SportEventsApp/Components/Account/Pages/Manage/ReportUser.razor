@@ -1,0 +1,179 @@
+﻿@page "/Account/Manage/ReportUser"
+
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using SportEventsApp.Data
+@inject UserManager<ApplicationUser> UserManager
+@inject ApplicationDbContext DbContext
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h3 class="mb-4">Report a User</h3>
+
+@if (isSubmitting)
+{
+    <div class="text-center my-5">
+        <div class="spinner-border" role="status"></div>
+    </div>
+}
+else if (submitSuccess)
+{
+    <div class="col-xl-6">
+        <div class="alert alert-success mt-2" role="alert">
+            Your report has been submitted. Thank you.
+        </div>
+    </div>
+}
+else
+{
+    <div class="col-xl-6">
+        <div>
+            @if (validationMessages.Count > 0)
+            {
+                <div class="alert alert-info text-start">
+                    <ul class="mb-0">
+                        @foreach (var msg in validationMessages)
+                        {
+                            <li>@msg</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <div class="mb-3">
+                <label for="email" class="form-label">User Email</label>
+                <input id="email" class="form-control" @bind="reportModel.ReportedUserEmail" />
+            </div>
+
+            <div class="mb-3">
+                <label for="category" class="form-label">Report Category</label>
+                <select id="category" class="form-select" @bind="reportModel.Category">
+                    <option value="">-- Select Category --</option>
+                    @foreach (var cat in categories)
+                    {
+                        <option value="@cat">@cat</option>
+                    }
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="comment" class="form-label">Comment</label>
+                <textarea id="comment" class="form-control" @bind="reportModel.Comment" rows="4"></textarea>
+            </div>
+
+            <button class="btn btn-danger" @onclick="SubmitReport">Submit Report</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? email { get; set; }
+
+    private ReportUserViewModel reportModel = new();
+    private bool isSubmitting = false;
+    private bool submitSuccess = false;
+    private readonly List<string> categories = new()
+    {
+        "harassment Or Abuse",
+        "No-Show Or Frequent Cancellations",
+        "Unsportsmanlike Conduct",
+        "Fake Profile Or Misleading Information",
+        "Other"
+    };
+    private List<string> validationMessages = new();
+
+    private string currentUserEmail;
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(email))
+        {
+            reportModel.ReportedUserEmail = email;
+        }
+    }
+
+    private async Task SubmitReport()
+    {
+        validationMessages.Clear();
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var currentUser = await UserManager.GetUserAsync(user);
+        currentUserEmail = currentUser?.Email;
+
+        if (!Validate())
+        {
+            return;
+        }
+
+        isSubmitting = true;
+        submitSuccess = false;
+
+        // Validate reported user exists
+        var reportedUser = await DbContext.Users
+            .FirstOrDefaultAsync(u => u.UserName.ToLower() == reportModel.ReportedUserEmail.ToLower());
+
+        if (reportedUser == null)
+        {
+            isSubmitting = false;
+            validationMessages.Add("The user you are trying to report does not exist.");
+            return;
+        }
+
+        var report = new Models.ReportUser
+        {
+            ReportingUserId = Guid.Parse(currentUser?.Id),
+            ReportedUserId = Guid.Parse(reportedUser.Id),
+            Category = reportModel.Category,
+            Comment = reportModel.Comment,
+        };
+        DbContext.ReportUsers.Add(report);
+        await DbContext.SaveChangesAsync();
+
+        isSubmitting = false;
+        submitSuccess = true;
+        reportModel = new();
+        StateHasChanged();
+    }
+
+    private bool Validate()
+    {
+        bool valid = true;
+        if (string.IsNullOrWhiteSpace(reportModel.ReportedUserEmail))
+        {
+            validationMessages.Add("Email is required");
+            valid = false;
+        }
+        else if (!string.IsNullOrEmpty(currentUserEmail) &&
+                 reportModel.ReportedUserEmail.Trim().ToLower() == currentUserEmail.Trim().ToLower())
+        {
+            validationMessages.Add("You cannot report yourself.");
+            valid = false;
+        }
+        if (string.IsNullOrWhiteSpace(reportModel.Category))
+        {
+            validationMessages.Add("Category is required");
+            valid = false;
+        }
+        if (string.IsNullOrWhiteSpace(reportModel.Comment))
+        {
+            validationMessages.Add("Comment is required");
+            valid = false;
+        }
+        else if (reportModel.Comment.Length > 500)
+        {
+            validationMessages.Add("Comment is too long (max 500 characters)");
+            valid = false;
+        }
+        return valid;
+    }
+
+    public class ReportUserViewModel
+    {
+        public string ReportedUserEmail { get; set; }
+        public string Category { get; set; }
+        public string Comment { get; set; }
+    }
+}

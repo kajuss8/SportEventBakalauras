@@ -1,0 +1,504 @@
+﻿@page "/"
+
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using SportEventsApp.Data
+@using SportEventsApp.Interfaces
+@using SportEventsApp.Models
+@using SportEventsApp.enums
+
+
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISportLevelRepository SportLevelRepository
+@inject ISportEventRepository SportEvents
+@inject IFriendListRepository FriendListRepository
+@inject IUserSportEventRepository UserSportEvents
+@inject NavigationManager Navigation
+
+<AuthorizeView>
+    <NotAuthorized>
+        <PageTitle>Home</PageTitle>
+        <div>
+            <div style="height: 50vh; display:flex; align-items:center" class="container">
+                <div>
+                    <h1>Connect Through Sports</h1>
+                    <p style="padding-top: 20px">Create and join sports events, build your network and stay alive with SportMeet</p>
+                    <NavLink class="nav-link" href="Account/Login">
+                        <button class="btn btn-primary" type="button">Get Started</button>
+                    </NavLink>
+                </div>
+            </div>
+            <hr />
+            <div class="container">
+                <div class="row text-center">
+                    <div class="col-md-4 ">
+                        <div class="border border-black p-4 d-flex flex-column align-items-start">
+                            <strong class="fs-5">Create Events</strong>
+                            <p class=" text-muted">Easily create and manage your own sports events</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border border-black p-4 d-flex flex-column align-items-start">
+                            <strong class="fs-5">Join Events</strong>
+                            <p class="text-muted">Find and join existing sports events in your area</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border border-black p-4 d-flex flex-column align-items-start">
+                            <strong class="fs-5">Build Your Network</strong>
+                            <p class="text-muted">Connect with other sports enthusiasts!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr />
+            <div class="container">
+                <div class="d-flex justify-content-between align-items-center" style="height: 15vh;">
+                    <div>
+                        <h5><strong>Ready to dive in?</strong></h5>
+                        <h5><strong>Create your account today!</strong></h5>
+                    </div>
+                    <NavLink class="nav-link" href="Account/Login">
+                        <button class="btn btn-primary" type="button">Get Started</button>
+                    </NavLink>
+                </div>
+            </div>
+            <hr />
+        </div>
+    </NotAuthorized>
+
+    <Authorized>
+        <PageTitle>User Home</PageTitle>
+
+        <div class="container mt-3">
+            <p><h3><strong>Welcome, @FullName!</strong></h3></p>
+            <div class="row">
+                <!-- First Container - User Profile -->
+                <div class="col-12">
+                    <div class="card border shadow-sm p-3 mb-3">
+                        <h5 class="card-title text-start ms-4"><strong>Your Profile</strong></h5>
+                        <div class="row">
+                            <div class="col-4 d-flex flex-column align-items-center">
+                                <div class="d-flex flex-column align-items-center justify-content-center flex-grow-1">
+                                    <img src="./favicon.png" class="rounded-circle img-fluid mb-2" alt="User Image">
+                                </div>
+                                <div class="mt-auto mb-2">
+                                    <NavLink class="nav-link" href="Account/Manage">
+                                        <button class="btn btn-primary">Edit Profile</button>
+                                    </NavLink>
+                                </div>
+                            </div>
+
+                            <div class="col-4">
+                                <p><strong>@FullName</strong></p>
+                                <p>@Email</p>
+                                <p>@City</p>
+                                <p>@Age years old</p>
+                                <p>@Gender</p>
+                            </div>
+
+                            <div class="col-4">
+                                @if (userSportLevels != null && userSportLevels.Any())
+                                {
+                                    <div>
+                                        <ul>
+                                            @foreach (var sportLevel in userSportLevels)
+                                            {
+                                                <p> @sportLevel.Sport - @SportLevelRepository.GetSportLevelDisplayName(sportLevel.Level)</p>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="">
+                                        You have not set any sport levels yet.
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="card border shadow-sm p-3">
+                        <h5 class="card-title text-center">Friend List</h5>
+                        <div style="max-height: 80px; overflow-y: auto;">
+                            <div class="row g-0">
+                                @if (friends != null && friends.Any())
+                                {
+                                    @foreach (var friend in friends)
+                                    {
+                                        <div class="col-6 text-center">
+                                            <p class="" style="cursor: pointer;" @onclick="() => ShowFriendDetails(friend)">@friend.FullName</p>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="text-center">No friends added.</p>
+                                }
+                            </div>
+                        </div>
+                        <div class="text-center mt-2">
+                            <NavLink class="nav-link" href="/Account/Manage/InviteFriend">
+                                <button class="btn btn-success btn-sm">Add Friend</button>
+                            </NavLink>
+                        </div>
+                    </div>
+                </div>
+
+                @if (selectedFriend != null)  
+                {  
+                    <div class="modal show d-block" tabindex="-1">  
+                        <div class="modal-dialog">  
+                            <div class="modal-content">  
+                                <div class="modal-header">  
+                                    <h5 class="modal-title">@selectedFriend.FullName Profile</h5>  
+                                    <button type="button" class="btn-close" @onclick="CloseFriendDetails"></button>  
+                                </div>  
+                                <div class="modal-body">  
+                                    <p><strong>Full Name:</strong> @selectedFriend.FullName</p>  
+                                    <p><strong>Email:</strong> @selectedFriend.Email</p>  
+                                    @if (!string.IsNullOrWhiteSpace(selectedFriend.City))
+                                    {
+                                        <p><strong>City:</strong> @selectedFriend.City</p>
+                                    }
+                                    <p><strong>Age:</strong> @CalculateAge(selectedFriend.DateOfBirth) years old</p>  
+                                    <p><strong>Gender:</strong> @selectedFriend.Gender</p>  
+                                    <p><strong>Sport Levels:</strong></p>  
+                                    @if (selectedFriendSportLevels != null && selectedFriendSportLevels.Any())  
+                                    {  
+                                        <ul>  
+                                            @foreach (var sportLevel in selectedFriendSportLevels)  
+                                            {  
+                                                <li>@sportLevel.Sport - @SportLevelRepository.GetSportLevelDisplayName(sportLevel.Level)</li>  
+                                            }  
+                                        </ul>  
+                                    }  
+                                    else  
+                                    {  
+                                        <p>No sport levels available.</p>  
+                                    }  
+                                </div>  
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-danger" @onclick="DeleteFriendAsync">Delete Friend</button>
+                                    <button type="button" class="btn btn-secondary" @onclick="CloseFriendDetails">Close</button>
+                                </div>  
+                            </div>  
+                        </div>  
+                    </div>  
+                }  
+
+                <div class="col-12 p-3">  
+                    <div class="col-12">  
+                        <div class="d-flex justify-content-start">  
+                            <button class="btn @((showCreatedEvents ? "btn-primary" : "btn-outline-primary"))" @onclick="ShowCreatedEvents">Created Events</button>  
+                            <button class="btn @((showJoinedEvents ? "btn-primary" : "btn-outline-primary"))" @onclick="ShowJoinedEvents">Joined Events</button>  
+                        </div>  
+                        <div class="card border shadow-sm p-3" style="max-height: 400px; overflow-y: auto;">  
+                            <h5 class="card-title text-center">Your Events</h5>  
+                            <div class="mt-3">  
+                                @if (showCreatedEvents)  
+                                {  
+                                    <div>    
+                                        @if (createdEvents != null && createdEvents.Any())  
+                                        {  
+                                            <div class="row">  
+                                                @foreach (var eventItem in createdEvents)  
+                                                {  
+                                                    <div class="col-md-4">  
+                                                        <div class="card border shadow-sm mb-3">  
+                                                            <div class="card-body">
+                                                                <h5 class="card-title mb-3"><strong>@eventItem.Name</strong></h5>
+                                                                <p class="card-text mb-1">@* @SportLevelRepository.GetSportById(eventItem.Id) *@</p>
+                                                                <p class="card-text mb-1">@eventItem.Date.ToString("MMMM dd, yyyy")</p>
+                                                                <p class="card-text mb-1">@eventItem.BeginningTime - @eventItem.EndTime</p>
+                                                                <p class="card-text mb-1">@eventItem.City, @eventItem.Location</p>
+                                                                <p class="card-text mb-1">
+                                                                    @(eventItem.IsMale && eventItem.IsFemale ? "Male, Female" :
+                                                                                    eventItem.IsMale ? "Male" :
+                                                                                    eventItem.IsFemale ? "Female" : "")
+                                                                </p>
+                                                                <p class="card-text mb-1">@eventItem.CurrentPlayersNumber / @eventItem.TotalPlayers participants</p>
+                                                                @foreach (var level in eventSportLevels[eventItem.Id])
+                                                                {
+                                                                    <span class="card-text mb-1">@SportLevelRepository.GetSportLevelDisplayName(level.Level)</span>
+
+                                                                    @(level != eventSportLevels[eventItem.Id].Last() ? ", " : "")
+                                                                }
+                                                                <p></p>
+                                                                <button class="btn btn-primary" @onclick="() => ShowEventDetails(eventItem)">View</button>
+                                                            </div>  
+                                                        </div>  
+                                                    </div>  
+                                                }  
+                                            </div>  
+                                        }  
+                                        else  
+                                        {  
+                                            <p>No created events.</p>  
+                                        }  
+                                    </div>  
+                                }  
+                                else if (showJoinedEvents)  
+                                {  
+                                    <div>  
+                                        @if (joinedEvents != null && joinedEvents.Any())  
+                                        {
+                                            <div class="row">
+                                                @foreach (var eventItem in joinedEvents)
+                                                {
+                                                    <div class="col-md-4">
+                                                        <div class="card border shadow-sm mb-3">
+                                                            <div class="card-body">
+                                                                <h5 class="card-title mb-3"><strong>@eventItem.Name</strong></h5>
+                                                                <p class="card-text mb-1">@* @SportLevelRepository.GetSportById(eventItem.Id) *@</p>
+                                                                <p class="card-text mb-1">@eventItem.Date.ToString("MMMM dd, yyyy")</p>
+                                                                <p class="card-text mb-1">@eventItem.BeginningTime - @eventItem.EndTime</p>
+                                                                <p class="card-text mb-1">@eventItem.City, @eventItem.Location</p>
+                                                                <p class="card-text mb-1">
+                                                                    @(eventItem.IsMale && eventItem.IsFemale ? "Male, Female" :
+                                                                                    eventItem.IsMale ? "Male" :
+                                                                                    eventItem.IsFemale ? "Female" : "")
+                                                                </p>
+                                                                <p class="card-text mb-1">@eventItem.CurrentPlayersNumber / @eventItem.TotalPlayers participants</p>
+                                                                @foreach (var level in eventSportLevels[eventItem.Id])
+                                                                {
+                                                                    <span class="card-text mb-1">@SportLevelRepository.GetSportLevelDisplayName(level.Level)</span>
+
+                                                                    @(level != eventSportLevels[eventItem.Id].Last() ? ", " : "")
+                                                                }
+                                                                <p></p>
+                                                                <button class="btn btn-primary" @onclick="() => ShowEventDetails(eventItem)">View</button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }  
+                                        else  
+                                        {  
+                                            <p>Not joined events.</p>  
+                                        }  
+                                    </div>  
+                                }  
+                            </div>  
+                        </div>  
+                    </div>  
+                </div>
+                @if (selectedEvent != null)
+                {
+                    <div class="modal show d-block" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">@selectedEvent.Name</h5>
+                                    <button type="button" class="btn-close" @onclick="CloseEventDetails"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p><strong>Sport:</strong> @SportLevelRepository.GetSportById(selectedEvent.Id)</p>
+                                    <p><strong>Date:</strong> @selectedEvent.Date.ToString("MMMM dd, yyyy")</p>
+                                    <p><strong>Time:</strong> @selectedEvent.BeginningTime - @(selectedEvent.EndTime.HasValue ? selectedEvent.EndTime.Value.ToString() : "N/A")</p>
+                                    <p><strong>Location:</strong> @selectedEvent.City, @selectedEvent.Location</p>
+                                    <p><strong>Price:</strong> @(selectedEvent.Price > 0 ? $"€{selectedEvent.Price.Value} for person" : "Free")</p>
+                                    <p><strong>Participants:</strong> @selectedEvent.CurrentPlayersNumber / @selectedEvent.TotalPlayers</p>
+                                    <p>
+                                        <strong>Gender:</strong>
+                                        @(selectedEvent.IsMale && selectedEvent.IsFemale ? "Male, Female" :
+                                                        selectedEvent.IsMale ? "Male" :
+                                                        selectedEvent.IsFemale ? "Female" : "N/A")
+                                    </p>
+                                    <span><strong>Level: </strong></span>
+                                    @foreach (var level in eventSportLevels[selectedEvent.Id])
+                                    {
+                                        @SportLevelRepository.GetSportLevelDisplayName(level.Level) @(level != eventSportLevels[selectedEvent.Id].Last() ? ", " : "")
+                                    }
+                                    <p></p>
+                                    <p><strong>Private:</strong> @(selectedEvent.IsPrivateEvent ? "Yes" : "No")</p>
+                                    <p><strong>Comment:</strong> @selectedEvent.Comment</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-success " @onclick="() => GoEventDetails(selectedEvent.Id)">Details</button>
+                                    <button type="button" class="btn btn-secondary" @onclick="CloseEventDetails">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private ApplicationUser? selectedFriend;
+    private List<SportLevel> selectedFriendSportLevels = new();
+
+    private async Task ShowFriendDetails(ApplicationUser friend)
+    {
+        selectedFriend = friend;
+        selectedFriendSportLevels = await SportLevelRepository.GetSportLevelsByUserId(Guid.Parse(friend.Id));
+    }
+
+    private async Task DeleteFriendAsync()
+    {
+        if (selectedFriend == null)
+            return;
+
+        if (User == null)
+            return;
+
+        var userId = Guid.Parse(User.Id);
+        var friendId = Guid.Parse(selectedFriend.Id);
+
+        await FriendListRepository.RemoveFriendAsync(userId, friendId);
+
+        friends = await GetFriendsAsync(userId);
+        selectedFriend = null;
+        StateHasChanged();
+    }
+
+    private void CloseFriendDetails()
+    {
+        selectedFriend = null;
+    }
+}
+
+
+@code {
+    private string? FullName { get; set; } = string.Empty;
+    private string? Email { get; set; } = string.Empty;
+    private string? City { get; set; } = string.Empty;
+    private int? Age { get; set; }
+    public Genders? Gender { get; set; }
+    private List<SportLevel> userSportLevels = new();
+    private ApplicationUser User = new();
+
+    private List<ApplicationUser> friends = new();
+
+    private bool showCreatedEvents = true;
+    private bool showJoinedEvents = false;
+    private List<SportEvent> createdEvents = new();
+    private List<SportEvent> joinedEvents = new();
+    private SportEvent? selectedEvent;
+    private Dictionary<int, List<SportLevel>> eventSportLevels = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity.IsAuthenticated)
+        {
+            User = await UserManager.GetUserAsync(user);
+            if (User != null)
+            {
+                FullName = User.FullName ?? user.Identity.Name;
+                Email = User.Email;
+                City = User.City;
+                Age = CalculateAge(User.DateOfBirth);
+                Gender = User.Gender;
+                userSportLevels = await SportLevelRepository.GetSportLevelsByUserId(Guid.Parse(User.Id));
+
+                friends = await GetFriendsAsync(Guid.Parse(User.Id));
+                await ShowCreatedEvents();
+            }
+        }
+        
+
+    }
+
+    private async Task<List<ApplicationUser>> GetFriendsAsync(Guid userId)
+    {
+        var friendList = await FriendListRepository.GetFriends(userId);
+
+        var friendDetails = new List<ApplicationUser>();
+
+        foreach (var friend in friendList)
+        {
+            Guid friendUserId;
+
+            if (friend.UserId == userId)
+            {
+                friendUserId = friend.FriendId;
+            }
+            else
+            {
+                friendUserId = friend.UserId;
+            }
+
+            var friendUser = await UserManager.FindByIdAsync(friendUserId.ToString());
+            if (friendUser != null)
+            {
+                friendDetails.Add(friendUser);
+            }
+        }
+
+        return friendDetails;
+    }
+        
+    
+
+    private int CalculateAge(DateOnly dateOfBirth)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var age = today.Year - dateOfBirth.Year;
+        if (dateOfBirth > today.AddYears(-age)) age--;
+        return age;
+    }
+
+    private async Task ShowCreatedEvents()
+    {
+        showCreatedEvents = true;
+        showJoinedEvents = false;
+
+        if (User != null)
+        {
+            createdEvents = await SportEvents.GetUserCreatedEvents(User.Id);
+
+            foreach (var eventItem in createdEvents)
+            {
+                var levels = SportLevelRepository.GetSportLevelsByEventId(eventItem.Id);
+                eventSportLevels[eventItem.Id] = levels;
+            }
+        }
+
+    }
+
+    private async Task ShowJoinedEvents()
+    {
+        showCreatedEvents = false;
+        showJoinedEvents = true;
+
+        if (User != null)
+        {
+            joinedEvents = await UserSportEvents.GetUserJoinedEvents(User.Id);
+
+            foreach (var eventItem in joinedEvents)
+            {
+                var levels = SportLevelRepository.GetSportLevelsByEventId(eventItem.Id);
+                eventSportLevels[eventItem.Id] = levels;
+            }
+        }
+
+    }
+
+	private async Task GoEventDetails(int eventId)
+	{
+        Navigation.NavigateTo($"EventInformation/{eventId}");
+	}
+
+    private void ShowEventDetails(SportEvent eventItem)
+    {
+        selectedEvent = eventItem;
+    }
+
+    private void CloseEventDetails()
+    {
+        selectedEvent = null;
+    }
+}
+

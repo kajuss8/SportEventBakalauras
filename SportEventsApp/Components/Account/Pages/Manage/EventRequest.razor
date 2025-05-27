@@ -1,0 +1,198 @@
+﻿@page "/Account/Manage/EventRequest"
+
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using SportEventsApp.Data
+@using SportEventsApp.enums
+@using SportEventsApp.Models
+@using SportEventsApp.Interfaces
+
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ApplicationDbContext DbContext
+@inject ISportLevelRepository SportLevel
+@inject IUserSportEventRepository UserSportEvents
+@inject ISportEventRepository SportEvents
+@inject NavigationManager Navigation
+
+<h3 class="mb-4">Event Invitations</h3>
+
+@if (isLoading)
+{
+    <div class="text-center my-5">
+        <div class="spinner-border" role="status"></div>
+    </div>
+}
+else if (eventInvites != null && eventInvites.Any())
+{
+    @if (!string.IsNullOrEmpty(joinEventMessage))
+    {
+        <div class="alert alert-info" role="alert">
+            @joinEventMessage
+        </div>
+    }
+    <div class="row row-cols-1 row-cols-md-2 g-3">
+        @foreach (var invite in eventInvites)
+        {
+            <div class="col-xl-6">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title mb-2">
+                            You are invited to: <strong>@invite.SportEvent?.Name</strong>
+                        </h5>
+                        <p class="card-text mb-1"><strong>Sport:</strong> @SportLevel.GetSportById(invite.SportEvent.Id)</p>
+                        <p class="card-text mb-1"><strong>Date:</strong> @invite.SportEvent?.Date.ToString("MMMM dd, yyyy")</p>
+                        <p class="card-text mb-1"><strong>Time:</strong> @invite.SportEvent?.BeginningTime - @invite.SportEvent?.EndTime</p>
+                        <p class="card-text mb-1"><strong>Location:</strong> @invite.SportEvent?.City, @invite.SportEvent?.Location</p>
+                        <p class="card-text mb-1"><strong>Participants:</strong> @invite.SportEvent?.CurrentPlayersNumber / @invite.SportEvent?.TotalPlayers</p>
+                        <p class="card-text mb-1">
+                            <strong>Gender:</strong>
+                            @(invite.SportEvent?.IsMale == true && invite.SportEvent?.IsFemale == true ? "Male, Female" :
+                                    invite.SportEvent?.IsMale == true ? "Male" :
+                                    invite.SportEvent?.IsFemale == true ? "Female" : "N/A")
+                        </p>
+                        <p class="card-text mb-1">
+                            <strong>Level:</strong>
+                            @if (EventSportLevels.TryGetValue(invite.SportEvent.Id, out var levels) && levels.Any())
+                            {
+                                @foreach (var level in levels)
+                                {
+                                    @SportLevel.GetSportLevelDisplayName(level.Level)
+
+                                    @(level != levels.Last() ? ", " : "")
+                                }
+                            }
+                        </p>
+                        <p class="card-text mb-1"><strong>Private:</strong> @(invite.SportEvent?.IsPrivateEvent == true ? "Yes" : "No")</p>
+                        <p class="card-text mb-1"><strong>Comment:</strong> @invite.SportEvent?.Comment</p>
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-outline-success btn-sm" @onclick="() => AcceptInvite(invite.Id)" disabled="@invite.Accept">
+                                <i class="bi bi-check-lg"></i> Accept
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="() => DeclineInvite(invite.Id)" disabled="@invite.Decline">
+                                <i class="bi bi-x-lg"></i> Decline
+                            </button>
+                            @if (invite.Accept)
+                            {
+                                <span class="badge bg-success ms-2">Accepted</span>
+                            }
+                            else if (invite.Decline)
+                            {
+                                <span class="badge bg-danger ms-2">Declined</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="col-xl-6">
+        <div class="alert alert-info mt-4" role="alert">
+            You have no event invitations.
+        </div>
+    </div>
+}
+
+@code {
+    private List<Invite> eventInvites = new();
+    private bool isLoading = true;
+    private Dictionary<int, List<SportLevel>> EventSportLevels = new();
+    private ApplicationUser currentUser = new();
+    private string joinEventMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            currentUser = await UserManager.GetUserAsync(user);
+
+            eventInvites = await DbContext.Invites
+                .Include(i => i.SportEvent)
+                .Where(i => i.InvitedUserId == Guid.Parse(currentUser.Id) && !i.Accept && !i.Decline)
+                .ToListAsync();
+
+            // Load sport levels for each event
+            foreach (var invite in eventInvites)
+            {
+                if (invite.SportEvent != null && !EventSportLevels.ContainsKey(invite.SportEvent.Id))
+                {
+                    var levels = SportLevel.GetSportLevelsByEventId(invite.SportEvent.Id);
+                    EventSportLevels[invite.SportEvent.Id] = levels;
+                }
+            }
+        }
+        isLoading = false;
+    }
+
+    private async Task AcceptInvite(int inviteId)
+    {
+        joinEventMessage = string.Empty;
+
+        var invite = await DbContext.Invites.Include(i => i.SportEvent).FirstOrDefaultAsync(i => i.Id == inviteId);
+
+        if (!SportLevel.IsUserAndEventlevelEqual(Guid.Parse(currentUser.Id), EventSportLevels[invite.SportEvent.Id]))
+        {
+            joinEventMessage = "Your sport level does not match the required level for this event.";
+            return;
+        }
+
+        if (invite.SportEvent.CurrentPlayersNumber >= invite.SportEvent.TotalPlayers)
+        {
+            joinEventMessage = "This event has reached the maximum number of participants.";
+            return;
+        }
+
+        if (await UserSportEvents.DoesUserAndEventExist(Guid.Parse(currentUser.Id), invite.SportEvent.Id))
+        {
+            joinEventMessage = "You have already joined this event please decline.";
+            return;
+        }
+
+        if ((currentUser.Gender == Genders.Male && invite.SportEvent.IsMale == false) ||
+            (currentUser.Gender == Genders.Female && invite.SportEvent.IsFemale == false))
+        {
+            joinEventMessage = "Your gender does not match the requirements for this event.";
+            return;
+        }
+
+        var userSportEvent = new ApplicationUserSportEvent
+            {
+                UserId = Guid.Parse(currentUser.Id),
+                SportEventId = invite.SportEvent.Id,
+				AcceptDate = DateTime.Now,
+            };
+
+        await UserSportEvents.CreateUserSportEvent(userSportEvent);
+        invite.SportEvent.CurrentPlayersNumber++;
+        await SportEvents.UpdateSportEvent(invite.SportEvent);
+        Navigation.NavigateTo($"/EventInformation/{inviteId}");
+
+        
+        if (invite != null && !invite.Accept && !invite.Decline)
+        {
+            invite.Accept = true;
+            invite.Decline = false;
+            await DbContext.SaveChangesAsync();
+            eventInvites.RemoveAll(i => i.Id == inviteId);
+        }
+    }
+
+    private async Task DeclineInvite(int inviteId)
+    {
+        var invite = await DbContext.Invites.Include(i => i.SportEvent).FirstOrDefaultAsync(i => i.Id == inviteId);
+        if (invite != null && !invite.Accept && !invite.Decline)
+        {
+            invite.Decline = true;
+            invite.Accept = false;
+            await DbContext.SaveChangesAsync();
+            eventInvites.RemoveAll(i => i.Id == inviteId);
+        }
+    }
+}

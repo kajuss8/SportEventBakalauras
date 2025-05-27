@@ -1,0 +1,343 @@
+﻿@page "/EventInformation/{eventId:int}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using SportEventsApp.Data
+@using SportEventsApp.Interfaces
+@using SportEventsApp.Models
+@using SportEventsApp.enums
+
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISportEventRepository SportEvents
+@inject IUserSportEventRepository UserSportEvents
+@inject UserManager<ApplicationUser> UserManager
+@inject ISportLevelRepository SportLevel
+@inject IUserRepository UserRepository
+@inject IFriendListRepository FriendListRepository
+@inject ApplicationDbContext DbContext
+@inject NavigationManager Navigation
+
+@if (EventDetails != null)
+{
+    <div class="container mt-4">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card border shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h3 class="card-title mb-0"><strong>@EventDetails.Name</strong></h3>
+                            @if (EventDetails.CreatorId == Guid.Parse(CurrentUser.Id))
+                            {
+                                <button class="btn btn-danger" @onclick="ShowDeleteConfirmation">Delete Event</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-danger" @onclick="LeaveEvent">Leave Event</button>
+
+                            }
+                            @if (showDeleteConfirmation)
+                            {
+                                <div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5);">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Confirm Delete</h5>
+                                                <button type="button" class="btn-close" @onclick="HideDeleteConfirmation"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p>Are you sure you want to delete this event?</p>
+                                                <div class="mb-3">
+                                                    <label for="deleteComment" class="form-label">Comment (optional):</label>
+                                                    <textarea id="deleteComment" class="form-control" @bind="deleteComment"></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button class="btn btn-danger" @onclick="ConfirmDeleteEvent">Delete</button>
+                                                <button class="btn btn-secondary" @onclick="HideDeleteConfirmation">Cancel</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <p class="card-text mb-1"><strong>Creator:</strong> @EventCreator.FullName</p>
+                        <p class="card-text mb-1"><strong>Sport:</strong> @SportLevel.GetSportById(EventDetails.Id)</p>
+                        <p class="card-text mb-1"><strong>Date:</strong> @EventDetails.Date.ToString("MMMM dd, yyyy")</p>
+                        <p class="card-text mb-1"><strong>Time:</strong> @EventDetails.BeginningTime - @EventDetails.EndTime</p>
+                        <p class="card-text mb-1"><strong>Location:</strong> @EventDetails.City, @EventDetails.Location</p>
+                        <p class="card-text mb-1"><strong>Price:</strong> @(EventDetails.Price > 0 ? $"€{EventDetails.Price.Value} per person" : "Free")</p>
+                        <p class="card-text mb-1"><strong>Participants:</strong> @EventDetails.CurrentPlayersNumber / @EventDetails.TotalPlayers</p>
+                        <p class="card-text mb-1">
+                            <strong>Gender:</strong>
+                            @(EventDetails.IsMale && EventDetails.IsFemale ? "Male, Female" :
+                                                    EventDetails.IsMale ? "Male" :
+                                                    EventDetails.IsFemale ? "Female" : "N/A")
+                        </p>
+                        <p class="card-text mb-1">
+                            <strong>Level:</strong>
+                            @if (EventSportLevels.Any())
+                            {
+                                @foreach (var level in EventSportLevels)
+                                {
+                                    @SportLevel.GetSportLevelDisplayName(level.Level)
+
+                                    @(level != EventSportLevels.Last() ? ", " : "")
+                                }
+                            }
+                        </p>
+                        <p class="card-text mb-1"><strong>Private:</strong> @(EventDetails.IsPrivateEvent ? "Yes" : "No")</p>
+                        <p class="card-text mb-1"><strong>Comment:</strong> @EventDetails.Comment</p>
+                        <hr />
+                        <h5>Participants</h5>
+                        @if (ParticipantInfos.Any())
+                        {
+                            <ul class="list-unstyled">
+                                @foreach (var info in ParticipantInfos)
+                                {
+                                    <li class="d-flex align-items-center justify-content-between mb-2">
+                                        <span>
+                                            @info.Name - <span class="text-muted">@info.Level</span>
+                                        </span>
+                                        @if (info.Name != CurrentUser.FullName)
+                                        {
+                                            <span>
+                                                <button class="btn btn-danger btn-sm ms-2"
+                                                @onclick="() => ReportUser(info.Email)">
+                                                    Report User
+                                                </button>
+                                                <button class="btn btn-success btn-sm ms-1"
+                                                @onclick="() => SendFriendRequest(info.Email)">
+                                                    Send Friend Request
+                                                </button>
+                                            </span>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p>No participants yet.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border shadow-sm h-100">
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="mb-3">Invite Friends to This Event</h5>
+                        @if (!string.IsNullOrEmpty(infoMessage))
+                        {
+                            <div class="alert alert-info">@infoMessage</div>
+                        }
+                        else if (!string.IsNullOrEmpty(successMessage))
+                        {
+                            <div class="alert alert-success">@successMessage</div>
+                        }
+                        <div class="row row-cols-1 g-1 overflow-auto" style="max-height: 400px;">
+                            @if (friends != null && friends.Any())
+                            {
+                                @foreach (var friend in friends)
+                                {
+                                    <div class="col mb-auto">
+                                        <div class="card h-70 shadow-sm">
+                                            <div class="card-body d-flex flex-column align-items-center">
+                                                <h6 class="card-title">@friend.FullName</h6>
+                                                <p class="text-muted mb-2">@friend.Email</p>
+                                                <button class="btn btn-outline-primary btn-sm"
+                                                @onclick="() => SendEventInvite(friend)">
+                                                    Invite to Event
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="col">
+                                    <div class="alert alert-info">No friends to invite.</div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+}
+else
+{
+    <p>Loading event information...</p>
+}
+
+@code {
+    [Parameter]
+    public int eventId { get; set; }
+
+    private SportEvent? EventDetails;
+    private List<(string Name, string Email, string Level)> ParticipantInfos = new();
+    private List<SportLevel> EventSportLevels = new();
+    private ApplicationUser EventCreator = new();
+    private ApplicationUser CurrentUser = new();
+
+    private List<ApplicationUser> friends = new();
+    private string? infoMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        EventDetails = await SportEvents.GetSportEventById(eventId);
+
+        // Get event sport levels
+        if (EventDetails != null)
+        {
+            EventSportLevels = SportLevel.GetSportLevelsByEventId(EventDetails.Id);
+        }
+
+        // Get participant names and their sport levels
+        var userIds = await UserSportEvents.GetUserIdsByEventId(eventId);
+        foreach (var userId in userIds)
+        {
+            var tempUser = await UserManager.FindByIdAsync(userId.ToString());
+            if (tempUser != null && !string.IsNullOrEmpty(tempUser.FullName))
+            {
+                // Get user's level for this sport/event
+                var userLevel = await SportLevel.GetUserSportLevel(tempUser.Id, EventDetails.Id);
+                var levelDisplay = userLevel != null
+                    ? SportLevel.GetSportLevelDisplayName(userLevel)
+                    : "";
+                ParticipantInfos.Add((tempUser.FullName, tempUser.Email, levelDisplay));
+            }
+        }
+
+        EventCreator = await UserRepository.GetUserById(EventDetails.CreatorId.ToString());
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            CurrentUser = await UserManager.GetUserAsync(user);
+            if (CurrentUser != null)
+            {
+                var userId = Guid.Parse(CurrentUser.Id);
+                var friendList = await FriendListRepository.GetFriends(userId);
+                friends = new List<ApplicationUser>();
+                foreach (var friend in friendList)
+                {
+                    Guid friendUserId = friend.UserId == userId ? friend.FriendId : friend.UserId;
+                    var friendUser = await UserManager.FindByIdAsync(friendUserId.ToString());
+                    if (friendUser != null)
+                        friends.Add(friendUser);
+                }
+            }
+        }
+    }
+
+    private async Task SendEventInvite(ApplicationUser friend)
+    {
+        infoMessage = null;
+        successMessage = null;
+
+        if (EventDetails == null || friend == null)
+            return;
+
+        if (EventDetails.CreatorId == Guid.Parse(friend.Id))
+        {
+            infoMessage = $"{friend.FullName} is the creator of this event and cannot be invited.";
+            return;
+        }
+
+        var isParticipant = await UserSportEvents.IsUserInEvent(friend.Id, EventDetails.Id);
+        if (isParticipant)
+        {
+            infoMessage = $"{friend.FullName} is already a participant in this event.";
+            return;
+        }
+
+        var alreadyInvited = await DbContext.Invites
+            .AnyAsync(i => i.SportEventId == EventDetails.Id && i.InvitedUserId == Guid.Parse(friend.Id));
+        if (alreadyInvited)
+        {
+            infoMessage = $"{friend.FullName} has already been invited to this event.";
+            return;
+        }
+
+        if (EventDetails.CurrentPlayersNumber >= EventDetails.TotalPlayers)
+        {
+            infoMessage = "This event is already full. No more participants can be invited.";
+            return;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var currentUser = await UserManager.GetUserAsync(user);
+
+        var invite = new Invite
+        {
+            SportEventId = EventDetails.Id,
+            UserId = Guid.Parse(currentUser.Id),
+            InvitedUserId = Guid.Parse(friend.Id),
+            Accept = false,
+            Decline = false,
+            Date = DateTime.UtcNow
+        };
+
+        DbContext.Invites.Add(invite);
+        await DbContext.SaveChangesAsync();
+
+        successMessage = $"Invitation sent to {friend.FullName}!";
+    }
+
+    private void ReportUser(string email)
+    {
+        Navigation.NavigateTo($"/Account/Manage/ReportUser?email={email}");
+    }
+
+    private void SendFriendRequest(string email)
+    {
+        Navigation.NavigateTo($"/Account/Manage/InviteFriend?email={email}");
+    }
+}
+
+@code {
+    private bool showDeleteConfirmation = false;
+    private string? deleteComment;
+
+    private void ShowDeleteConfirmation()
+    {
+        showDeleteConfirmation = true;
+        deleteComment = null;
+    }
+
+    private void HideDeleteConfirmation()
+    {
+        showDeleteConfirmation = false;
+        deleteComment = null;
+    }
+
+    private async Task ConfirmDeleteEvent()
+    {
+        if (EventDetails != null)
+        {
+            EventDetails.DeleteComment = deleteComment;
+            await SportEvents.DeleteSportEvent(EventDetails.Id, deleteComment);
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private async Task LeaveEvent()
+    {
+        if (EventDetails == null || CurrentUser == null)
+            return;
+        var userSportEvent = await UserSportEvents.GetUserSportEventByUserIdAndEventId(CurrentUser.Id, EventDetails.Id);
+        if (userSportEvent != null)
+        {
+            await UserSportEvents.DeleteUserSportEvent(userSportEvent);
+            EventDetails.CurrentPlayersNumber--;
+            await SportEvents.UpdateSportEvent(EventDetails);
+            Navigation.NavigateTo("/");
+        }
+    }
+}

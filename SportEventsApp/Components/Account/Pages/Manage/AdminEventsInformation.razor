@@ -1,0 +1,306 @@
+﻿@page "/Account/Manage/EventsInformation"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Identity
+@using SportEventsApp.Data
+@using SportEventsApp.Interfaces
+@using SportEventsApp.Models
+@using SportEventsApp.enums
+
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISportEventRepository SportEvents
+@inject ISportLevelRepository SportLevel
+@inject IUserSportEventRepository UserSportEvents
+@inject NavigationManager Navigation
+@inject IUserRepository UserRepository
+
+<h3>EventHistory</h3>
+
+<div class="d-flex mb-3 gap-2">
+    <input class="form-control"
+           style="max-width: 300px;"
+           placeholder="Search events by name..."
+           @bind="searchTerm"
+           @bind:event="oninput" />
+
+    <select class="form-select"
+            style="max-width: 250px;"
+            @bind="selectedCreatorId">
+        <option value="">All Creators</option>
+        @foreach (var user in allUsers)
+        {
+            <option value="@user.Id">@user.Email</option>
+        }
+    </select>
+    <select class="form-select"
+    style="max-width: 200px;"
+    @bind="selectedSport">
+        <option value="">All Sports</option>
+        @foreach (var sport in Enum.GetValues(typeof(Sports)).Cast<Sports>())
+        {
+            <option value="@sport">@sport</option>
+        }
+    </select>
+    <select class="form-select"
+    style="max-width: 200px;"
+    @bind="selectedLevel">
+        <option value="">All Levels</option>
+        @foreach (var level in Enum.GetValues(typeof(SportLevels)).Cast<SportLevels>())
+        {
+            <option value="@level">@SportLevel.GetSportLevelDisplayName(level)</option>
+        }
+    </select>
+    <select class="form-select"
+    style="max-width: 200px;"
+    @bind="selectedActiveStatusString">
+        <option value="">All Statuses</option>
+        <option value="true">Active</option>
+        <option value="false">Inactive</option>
+    </select>
+</div>
+
+@if (events == null)
+{
+    <p>Loading events...</p>
+}
+else if (!events.Any())
+{
+    <p>No active events available.</p>
+}
+else
+{
+    <div class="row">
+        @foreach (var eventItem in FilteredEvents)
+        {
+            <div class="col-md-4">
+                <div class="card border shadow-sm mb-3">
+                    <div class="card-body">
+                        @if(eventItem.DeleteTime != null)
+                        {
+                            <span class="text-danger fw-bold">Deleted event</span>
+                        }
+                        <h5 class="card-title mb-3"><strong>@eventItem.Name</strong></h5>
+                        <p class="card-text mb-1">@SportLevel.GetSportById(eventItem.Id)</p>
+                        <p class="card-text mb-1">@eventItem.Date.ToString("MMMM dd, yyyy")</p>
+                        <p class="card-text mb-1">@eventItem.BeginningTime - @eventItem.EndTime</p>
+                        <p class="card-text mb-1">@eventItem.City, @eventItem.Location</p>
+                        <p class="card-text mb-1">
+                            @(eventItem.IsMale && eventItem.IsFemale ? "Male, Female" :
+                                    eventItem.IsMale ? "Male" :
+                                    eventItem.IsFemale ? "Female" : "N/A")
+                        </p>
+                        <p class="card-text mb-1">@eventItem.CurrentPlayersNumber / @eventItem.TotalPlayers participants</p>
+                        @foreach (var level in EventSportLevels[eventItem.Id])
+                        {
+                            <span class="card-text mb-1">@SportLevel.GetSportLevelDisplayName(level.Level)</span>
+
+                            @(level != EventSportLevels[eventItem.Id].Last() ? ", " : "")
+                        }
+                        <p></p>
+                        <button class="btn btn-primary" @onclick="() => ShowEventDetails(eventItem)">View Details</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (selectedEvent != null)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@selectedEvent.Name</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEventDetails"></button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Creator:</strong> @CreatorName </p>
+                    <p><strong>Sport:</strong> @SportLevel.GetSportById(selectedEvent.Id)</p>
+                    <p><strong>Date:</strong> @selectedEvent.Date.ToString("MMMM dd, yyyy")</p>
+                    <p><strong>Time:</strong> @selectedEvent.BeginningTime - @selectedEvent.EndTime</p>
+                    <p><strong>Location:</strong> @selectedEvent.City, @selectedEvent.Location</p>
+                    <p><strong>Price:</strong> @(selectedEvent.Price > 0 ? $"€{selectedEvent.Price.Value} for person" : "Free")</p>
+                    <p><strong>Participants:</strong> @selectedEvent.CurrentPlayersNumber / @selectedEvent.TotalPlayers</p>
+                    <p>
+                        <strong>Gender:</strong>
+                        @(selectedEvent.IsMale && selectedEvent.IsFemale ? "Male, Female" :
+                                                    selectedEvent.IsMale ? "Male" :
+                                                    selectedEvent.IsFemale ? "Female" : "N/A")
+                    </p>
+                    <span><strong>Level: </strong></span>
+                    @foreach (var level in EventSportLevels[selectedEvent.Id])
+                    {
+                        @SportLevel.GetSportLevelDisplayName(level.Level) @(level != EventSportLevels[selectedEvent.Id].Last() ? ", " : "")
+                    }
+                    <p></p>
+                    <p><strong>Is Active:</strong> @(selectedEvent.IsActive ? "Yes" : "No")</p>
+                    <p><strong>Create Date:</strong> @selectedEvent.CreatedEventDate</p>
+                    @if (selectedEvent.DeleteTime != null)
+                    {
+                        <p><strong>Delete Comment:</strong> @(selectedEvent.DeleteComment != null ? selectedEvent.DeleteComment : "NO DELETE COMMENT")</p>
+                        <p><strong>Delete time:</strong> @selectedEvent.DeleteTime</p>
+                    }
+                    <p><strong>Comment:</strong> @(selectedEvent.Comment != string.Empty ? selectedEvent.Comment : "NO COMMENT")</p>
+                    <hr />
+                    <h5>Participants</h5>
+                    @if (ParticipantInfos.Any())
+                    {
+                        <ul class="list-unstyled">
+                            @foreach (var info in ParticipantInfos)
+                            {
+                                <li class="d-flex align-items-center justify-content-between mb-2">
+                                    <span>
+                                        @info.Name - <span class="text-muted">@info.Level</span>
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+                <div class="modal-footer">
+                    @if(selectedEvent.IsActive)
+                    {
+                        <button class="btn btn-danger" @onclick="ShowDeleteConfirmation">Delete Event</button>
+                    }
+                    @if (showDeleteConfirmation)
+                    {
+                        <div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5);">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Confirm Delete</h5>
+                                        <button type="button" class="btn-close" @onclick="HideDeleteConfirmation"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p>Are you sure you want to delete this event?</p>
+                                        <div class="mb-3">
+                                            <label for="deleteComment" class="form-label">Comment (optional):</label>
+                                            <textarea id="deleteComment" class="form-control" @bind="deleteComment"></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button class="btn btn-secondary" @onclick="HideDeleteConfirmation">Cancel</button>
+                                        <button class="btn btn-danger" @onclick="ConfirmDeleteEvent">Delete</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEventDetails">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IEnumerable<SportEvent> events;
+    private SportEvent? selectedEvent;
+    private Dictionary<int, List<SportLevel>> EventSportLevels = new();
+    private string CreatorName = string.Empty;
+    private List<(string Name, string Email, string Level)> ParticipantInfos = new();
+    private string joinEventMessage = string.Empty;
+    private string searchTerm = string.Empty;
+    private Sports? selectedSport = null;
+    private SportLevels? selectedLevel = null;
+    private string selectedActiveStatusString = "";
+    private bool? selectedActiveStatus = null;
+    private string selectedCreatorId = "";
+    private List<ApplicationUser> allUsers = new();
+
+    private IEnumerable<SportEvent> FilteredEvents =>
+    events == null ? Enumerable.Empty<SportEvent>() :
+    events.Where(e =>
+        (string.IsNullOrWhiteSpace(searchTerm) ||
+            (!string.IsNullOrEmpty(e.Name) && e.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)))
+        &&
+        (!selectedSport.HasValue ||
+            EventSportLevels[e.Id].Any(level => level.Sport == selectedSport.Value))
+        &&
+        (!selectedLevel.HasValue ||
+            EventSportLevels[e.Id].Any(level => level.Level == selectedLevel.Value))
+        &&
+        (string.IsNullOrEmpty(selectedActiveStatusString) ||
+            e.IsActive == (selectedActiveStatusString == "true"))
+        &&
+        (string.IsNullOrEmpty(selectedCreatorId) ||
+            e.CreatorId.ToString() == selectedCreatorId)
+    );
+
+    protected override async Task OnInitializedAsync()
+    {
+        events = await SportEvents.GetAllEvents();
+        var tempEvent = new List<SportEvent>();
+        foreach (var eventItem in events)
+        {
+
+            tempEvent.Add(eventItem);
+            var levels = SportLevel.GetSportLevelsByEventId(eventItem.Id);
+            EventSportLevels[eventItem.Id] = levels;
+
+        }
+        events = tempEvent.AsEnumerable().Reverse();
+        allUsers = (await UserRepository.GetAllUsers());
+
+    }
+
+    private async Task ShowEventDetails(SportEvent eventItem)
+    {
+        selectedEvent = eventItem;
+        CreatorName = (await UserRepository.GetUserById(selectedEvent.CreatorId.ToString())).FullName;
+
+        var userIds = await UserSportEvents.GetUserIdsByEventId(selectedEvent.Id);
+        ParticipantInfos = new();
+        foreach (var userId in userIds)
+        {
+            var tempUser = await UserManager.FindByIdAsync(userId.ToString());
+            if (tempUser != null && !string.IsNullOrEmpty(tempUser.FullName))
+            {
+                var userLevel = await SportLevel.GetUserSportLevel(tempUser.Id, selectedEvent.Id);
+                var levelDisplay = userLevel != null
+                    ? SportLevel.GetSportLevelDisplayName(userLevel)
+                    : "";
+                ParticipantInfos.Add((tempUser.FullName, tempUser.Email, levelDisplay));
+            }
+        }
+    }
+
+    private void CloseEventDetails()
+    {
+        selectedEvent = null;
+        joinEventMessage = string.Empty;
+    }
+}
+
+ @code {
+    private bool showDeleteConfirmation = false;
+    private string? deleteComment;
+
+    private void ShowDeleteConfirmation()
+    {
+        showDeleteConfirmation = true;
+        deleteComment = null;
+    }
+
+    private void HideDeleteConfirmation()
+    {
+        showDeleteConfirmation = false;
+        deleteComment = null;
+    }
+
+    private async Task ConfirmDeleteEvent()
+    {
+        if (selectedEvent != null)
+        {
+            selectedEvent.DeleteComment = deleteComment;
+            await SportEvents.DeleteSportEvent(selectedEvent.Id, deleteComment);
+            showDeleteConfirmation = false;
+            selectedEvent = null;
+        }
+    }
+
+}

@@ -1,0 +1,13 @@
+.navbar-collapse {
+    display: none; /* Initially hidden */
+}
+
+.navbar-collapse.show {
+    display: block; /* Show when toggled */
+}
+
+@media (min-width: 768px) { /* Only collapse in mobile view */
+    .navbar-collapse {
+        display: flex !important;
+    }
+}

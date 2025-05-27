@@ -1,0 +1,83 @@
+﻿@page "/createEvent/EventSportLevel"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Identity
+@using SportEventsApp.Data
+@using System.ComponentModel.DataAnnotations
+@using SportEventsApp.Models.dataService
+@using SportEventsApp.enums
+
+@inject NavigationManager NavigationManager
+@inject CreateEventData CreateEventData
+
+
+<div class="row">
+    <div class="d-flex justify-content-center align-items-center">
+        <div class="col-xl-4">
+            <h3>Sport Level</h3>
+            @foreach (var level in Levels)
+            {
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind=checkboxes[level.LevelIndex] />
+                            <label class="form-check-label fw-bold ms-2">@level.Title</label>
+                        </div>
+                        <p class="text-muted small">@level.Description</p>
+                    </div>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="alert alert-danger" role="alert">@ErrorMessage</div>
+            }
+            <button @onclick="OnButtonClick" class="w-100 btn btn-lg btn-primary">Submit</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool[] checkboxes = new bool[5];
+    private List<int> SelectedLevels { get; set; } = new List<int>();
+    private string ErrorMessage { get; set; } = string.Empty;
+
+    private List<LevelOption> Levels = new List<LevelOption>
+    {
+        new LevelOption { Id = "beginner", LevelIndex = 0, Title = "Beginner", Description = "You're new to this sport, but you're excited to learn the basics and build up your skills from the ground up." },
+        new LevelOption { Id = "lowerIntermediate", LevelIndex = 1, Title = "Lower Intermediate", Description = "You're improving in this sport, mastering basic moves and strategies, gaining confidence as you grasp finer details." },
+        new LevelOption { Id = "intermediate", LevelIndex = 2, Title = "Intermediate", Description = "You're skilled in this sport, understanding the game well and capable of using advanced moves and tactics." },
+        new LevelOption { Id = "upperIntermediate", LevelIndex = 3, Title = "Upper Intermediate", Description = "You excel in this sport, demonstrating polished skills and a deep understanding. You effortlessly use advanced moves and clever strategies." },
+        new LevelOption { Id = "expert", Title = "Expert", LevelIndex = 4, Description = "You're a sport master! You've practiced loads, competed at top levels for years, and know all the moves and tactics like a pro." }
+    };
+
+    private ApplicationUser user = default!;
+
+    private void OnButtonClick()
+    {
+        SelectedLevels = checkboxes
+            .Select((isChecked, index) => new { isChecked, index })
+            .Where(x => x.isChecked)
+            .Select(x => x.index)
+            .ToList();
+
+        if (!SelectedLevels.Any())
+        {
+            ErrorMessage = "Please select at least one sport level.";
+            return;
+        }
+
+        ErrorMessage = string.Empty;
+
+        CreateEventData.EventSelectedLevels = SelectedLevels;
+        NavigationManager.NavigateTo($"/createEvent/EventSportLevel/EventDetails");
+    }
+
+    public class LevelOption
+    {
+        public string Id { get; set; } = string.Empty;
+        public int LevelIndex { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public bool IsSelected { get; set; } = false;
+    }
+}

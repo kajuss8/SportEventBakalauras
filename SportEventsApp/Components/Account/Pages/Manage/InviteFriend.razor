@@ -1,0 +1,107 @@
+﻿@page "/Account/Manage/InviteFriend"
+
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Identity
+@using SportEventsApp.Data
+@using SportEventsApp.Models
+
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h3>Invite a Friend</h3>
+<div class="row">
+    <div class="col-xl-6">
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <div class="alert alert-info mt-2">@message</div>
+        }
+        else if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="alert alert-success mt-2">@successMessage</div>
+        }
+        <div class="form-floating mb-3">
+            <input type="email" id="emailInput" class="form-control" @bind="friendEmail" placeholder="Enter email" />
+            <label for="emailInput">Enter Friend's Email:</label>
+        </div>
+        <button class="w-100 btn btn-lg btn-primary" @onclick="AddFriend">Add Friend</button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? email { get; set; }
+
+    private string friendEmail = string.Empty;
+    private string message = string.Empty;
+    private string successMessage = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(email))
+        {
+            friendEmail = email;
+        }
+        Console.WriteLine(email);
+    }
+
+    [Inject]
+    private UserManager<ApplicationUser> UserManager { get; set; } = default!;
+
+    [Inject]
+    private ApplicationDbContext DbContext { get; set; } = default!;
+
+    private async Task AddFriend()
+    {
+        var user = await UserManager.FindByEmailAsync(friendEmail);
+        if (user == null)
+        {
+            message = "User not found.";
+            return;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var currUser = authState.User;
+
+        var currentUser = await UserManager.GetUserAsync(currUser);
+
+        if(currentUser.Email == friendEmail)
+        {
+            message = "You cannot report yourself.";
+            return;
+        }
+
+        var existingRequest = DbContext.FriendList
+            .FirstOrDefault(fl =>
+                (fl.UserId == Guid.Parse(currentUser.Id) && fl.FriendId == Guid.Parse(user.Id)) ||
+                (fl.UserId == Guid.Parse(user.Id) && fl.FriendId == Guid.Parse(currentUser.Id))
+            );
+
+        if (existingRequest != null)
+        {
+            if (existingRequest.IsAccepted)
+            {
+                message = "";
+                successMessage = "You are already friends with this user.";
+                return;
+            }
+            else
+            {
+                message = "Friend request already sent. Please wait for a response.";
+                return;
+            }
+        }
+
+        var friendRequest = new FriendList
+        {
+            UserId = Guid.Parse(currentUser.Id),
+            FriendId = Guid.Parse(user.Id),
+            Date = DateTime.Now,
+            IsAccepted = false
+        };
+
+        DbContext.FriendList.Add(friendRequest);
+        await DbContext.SaveChangesAsync();
+
+        message = "Friend request sent!";
+   }
+}

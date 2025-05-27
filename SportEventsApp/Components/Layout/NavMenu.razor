@@ -1,0 +1,105 @@
+﻿@rendermode InteractiveServer
+
+<nav class="navbar navbar-expand-md navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+    <a class="navbar-brand me-6" href="">SportMeet</a>
+    <button class="navbar-toggler @NavButtonCssClass" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse"
+            aria-controls="navbarCollapse" aria-label="Toggle navigation" @onclick="ToggleNavMenu">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+        <div class="collapse navbar-collapse @NavBarCssClass" id="navbarCollapse" @onclick="ToggleNavMenu">
+        <ul class="navbar-nav me-auto mb-2 mb-md-0">
+            <AuthorizeView>
+                <NotAuthorized>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                                <span class="oi oi-home" aria-hidden="true"></span> Home
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="event">
+                            <span class="oi oi-home" aria-hidden="true"></span> Events
+                        </NavLink>
+                    </li>
+                </NotAuthorized>
+                <Authorized>
+                    <li class="nav-item">
+                            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                                <span class="oi oi-home" aria-hidden="true"></span> Home
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="events">
+                                <span class="oi oi-home" aria-hidden="true"></span> Events
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="createEvent">
+                            <span class="oi oi-home" aria-hidden="true"></span> Create Event
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="history">
+                            <span class="oi oi-home" aria-hidden="true"></span> History
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="chat">
+                            <span class="oi oi-home" aria-hidden="true"></span> ChatBot
+                        </NavLink>
+                    </li>
+                </Authorized>
+            </AuthorizeView>
+            </ul>
+
+            <ul class="navbar-nav ms-auto mb-2 mb-md-0">
+            <AuthorizeView>
+                <Authorized>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="Account/Manage">
+                                <span class="oi oi-home" aria-hidden="true"></span> @context.User.Identity?.Name
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <form action="Account/Logout" method="post">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="ReturnUrl" value="" />
+                            <button type="submit" class="nav-link">
+                                    <span class="oi oi-home" aria-hidden="true"></span> Logout
+                            </button>
+                        </form>
+                    </li>
+                </Authorized>
+                <NotAuthorized>
+                    <li class="nav-item ">
+                        <NavLink class="nav-link" href="Account/Register">
+                                <span class="oi oi-home" aria-hidden="true"></span> Register
+                        </NavLink>
+                    </li>
+                    <li class="nav-item ">
+                        <NavLink class="nav-link px-5" href="Account/Login">
+                                <span class="oi oi-home" aria-hidden="true"></span> Login
+                        </NavLink>
+                    </li>
+                </NotAuthorized>
+            </AuthorizeView>
+        </ul>
+    </div>
+    </div>
+</nav>
+
+
+@code {
+
+    private bool collapseNavMenu = true;
+    private string? NavBarCssClass => collapseNavMenu ? null : "show";
+    private string? NavButtonCssClass => collapseNavMenu ? "collapsed" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}
+
+
+

@@ -1,0 +1,275 @@
+﻿@page "/Account/Manage/UsersInformation"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using SportEventsApp.Data
+@attribute [Authorize(Roles = "Admin")]
+
+@inject ApplicationDbContext DbContext
+
+<h3>Users Information</h3>
+
+@if (usersInfo == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Full Name</th>
+                <th>Email</th>
+                <th>Date of Birth</th>
+                <th>Registration Date</th>
+                <th>Last Logged Time</th>
+                <th>Block Date</th>
+                <th>Block Comment</th>
+                <th>Reported Times</th>
+                <th>Deleted Events</th>
+                <th>Created Events</th>
+                <th>Leaved Events</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in usersInfo)
+            {
+                <tr>
+                    <td>@user.FullName</td>
+                    <td>@user.Email</td>
+                    <td>@user.DateOfBirth</td>
+                    <td>@user.RegistrationDate</td>
+                    <td>@user.LastLoggedTime</td>
+                    <td>@user.BlockDate</td>
+                    <td>@user.BlockComment</td>
+                    <td>
+                        <button class="btn btn-link" @onclick="() => ShowReports(user.Id)">
+                            @user.ReportedTimes
+                        </button>
+                    </td>
+                    <td>@user.DeletedEvents</td>
+                    <td>@user.CreatedEvents</td>
+                    <td>@user.LeavedEvents</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+@if (showReportPopup)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Reports for User</h5>
+                    <button type="button" class="btn-close" @onclick="ClosePopup"></button>
+                </div>
+                <div class="modal-body">
+                    @if (selectedUserReports == null || !selectedUserReports.Any())
+                    {
+                        <p>No reports found.</p>
+                    }
+                    else
+                    {
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Reporting User</th>
+                                    <th>Category</th>
+                                    <th>Comment</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var report in selectedUserReports)
+                                {
+                                    <tr>
+                                        <td>@report.ReportingUserFullName</td>
+                                        <td>@report.Category</td>
+                                        <td>@report.Comment</td>
+                                        <td>@report.Date</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-danger" @onclick="ShowBlockUser">Block user</button>
+                    <button class="btn btn-secondary" @onclick="ClosePopup">Close</button>
+                </div>
+                @if (showBlockUser)
+                {
+                    <div class="modal show d-block" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Block User</h5>
+                                    <button type="button" class="btn-close" @onclick="CloseBlockUser"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label for="blockComment" class="form-label">Block Comment</label>
+                                        <textarea id="blockComment" class="form-control" @bind="blockComment"></textarea>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(blockError))
+                                    {
+                                        <div class="alert alert-danger">@blockError</div>
+                                    }
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-danger" @onclick="ConfirmBlockUser">Confirm Block</button>
+                                    <button class="btn btn-secondary" @onclick="CloseBlockUser">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-backdrop show"></div>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    private List<AdminUserInfoViewModel>? usersInfo;
+    private bool showReportPopup = false;
+    private List<UserReportDetailViewModel>? selectedUserReports;
+    private bool showBlockUser = false;
+    private string blockComment = string.Empty;
+    private string? blockingUserId = null;
+    private string? blockError = null;
+    private string? selectedUserId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        usersInfo = await (from user in DbContext.Users
+                           select new AdminUserInfoViewModel
+                               {
+                                   Id = user.Id,
+                                   FullName = user.FullName,
+                                   Email = user.Email,
+                                   DateOfBirth = user.DateOfBirth,
+                                   RegistrationDate = user.RegistrationDate,
+                                   LastLoggedTime = user.LastLoggedTime,
+                                   BlockDate = user.BlockDate,
+                                   BlockComment = user.BlockComment,
+                                   ReportedTimes = DbContext.ReportUsers.Count(r => r.ReportedUserId.ToString() == user.Id),
+                                   DeletedEvents = DbContext.SportEvents.Count(e => e.CreatorId.ToString() == user.Id && e.DeleteTime != null),
+                                   CreatedEvents = DbContext.SportEvents.Count(e => e.CreatorId.ToString() == user.Id),
+                                   LeavedEvents = DbContext.UserSportEvents.Count(a => a.UserId.ToString() == user.Id && a.Decliner != null)
+                               })
+                           .OrderByDescending(u => u.ReportedTimes)
+                           .ThenByDescending(u => u.DeletedEvents)
+                           .ToListAsync();
+    }
+
+    private async Task ShowReports(string userId)
+    {
+        selectedUserId = userId;
+        selectedUserReports = await (from report in DbContext.ReportUsers
+                                     join reportingUser in DbContext.Users
+                                     on report.ReportingUserId.ToString() equals reportingUser.Id
+                                     where report.ReportedUserId.ToString() == userId
+                                     select new UserReportDetailViewModel
+                                         {
+                                             ReportingUserFullName = reportingUser.FullName,
+                                             Category = report.Category,
+                                             Comment = report.Comment,
+                                             Date = report.Date
+                                         }).ToListAsync();
+
+        showReportPopup = true;
+    }
+
+	private void ClosePopup()
+	{
+		showReportPopup = false;
+		selectedUserReports = null;
+	}
+
+    public class AdminUserInfoViewModel
+    {
+		public string Id { get; set; }
+        public string? FullName { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public DateOnly DateOfBirth { get; set; }
+        public string? Gender { get; set; }
+        public DateTime RegistrationDate { get; set; }
+        public DateTime LastLoggedTime { get; set; }
+        public DateTime? BlockDate { get; set; }
+        public string? BlockComment { get; set; }
+        public int ReportedTimes { get; set; }
+        public int DeletedEvents { get; set; }
+        public int CreatedEvents { get; set; }
+        public int LeavedEvents { get; set; }
+    }
+
+    public class UserReportDetailViewModel
+    {
+        public string? ReportingUserFullName { get; set; }
+        public string? Category { get; set; }
+        public string? Comment { get; set; }
+        public DateTime Date { get; set; }
+    }
+
+    private void ShowBlockUser()
+    {
+        showBlockUser = true;
+        blockComment = string.Empty;
+        blockError = null;
+    }
+
+    private void CloseBlockUser()
+    {
+        showBlockUser = false;
+        blockComment = string.Empty;
+        blockError = null;
+    }
+
+    private async Task ConfirmBlockUser()
+    {
+        if (string.IsNullOrWhiteSpace(blockComment))
+        {
+            blockError = "Block comment is required.";
+            return;
+        }
+        if (selectedUserId == string.Empty)
+        {
+            blockError = "User not found.";
+            return;
+        }
+
+        var user = await DbContext.Users.FirstOrDefaultAsync(u => u.Id == selectedUserId);
+        if (user == null)
+        {
+            blockError = "User not found.";
+            return;
+        }
+
+        if (user.BlockDate != null)
+        {
+            blockError = "User Is already blocked.";
+            return;
+        }
+
+        user.BlockDate = DateTime.Now;
+        user.BlockComment = blockComment;
+        await DbContext.SaveChangesAsync();
+
+        // Update local list
+        var userInfo = usersInfo?.FirstOrDefault(u => u.Id == selectedUserId);
+        if (userInfo != null)
+        {
+            userInfo.BlockDate = user.BlockDate;
+            userInfo.BlockComment = user.BlockComment;
+        }
+
+        showBlockUser = false;
+        showReportPopup = false;
+        blockComment = string.Empty;
+        blockError = null;
+        blockingUserId = null;
+    }
+}

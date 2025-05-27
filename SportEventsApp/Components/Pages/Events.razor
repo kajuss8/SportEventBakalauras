@@ -1,0 +1,231 @@
+﻿@page "/events"  
+@rendermode InteractiveServer  
+@using Microsoft.AspNetCore.Identity
+@using SportEventsApp.Data
+@using SportEventsApp.Interfaces  
+@using SportEventsApp.Models  
+@using SportEventsApp.enums
+
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ISportEventRepository SportEvents  
+@inject ISportLevelRepository SportLevel
+@inject IUserSportEventRepository UserSportEvents
+@inject NavigationManager Navigation
+
+
+<h3>Upcoming Events</h3>  
+
+<div class="d-flex mb-3 gap-2">
+    <input class="form-control"
+           style="max-width: 300px;"
+           placeholder="Search events by name..."
+           @bind="searchTerm"
+           @bind:event="oninput" />
+
+    <select class="form-select"
+            style="max-width: 200px;"
+            @bind="selectedSport">
+        <option value="">All Sports</option>
+        @foreach (var sport in Enum.GetValues(typeof(Sports)).Cast<Sports>())
+        {
+            <option value="@sport">@sport</option>
+        }
+    </select>
+    <select class="form-select"
+            style="max-width: 200px;"
+            @bind="selectedLevel">
+        <option value="">All Levels</option>
+        @foreach (var level in Enum.GetValues(typeof(SportLevels)).Cast<SportLevels>())
+        {
+            <option value="@level">@SportLevel.GetSportLevelDisplayName(level)</option>
+        }
+    </select>
+</div>
+
+@if (events == null)
+{
+    <p>Loading events...</p>
+}
+else if (!events.Any())
+{
+    <p>No active events available.</p>
+}
+else
+{
+    <div class="row">
+        @foreach (var eventItem in FilteredEvents)
+        {
+            <div class="col-md-4">
+                <div class="card border shadow-sm mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3"><strong>@eventItem.Name</strong></h5>
+                        <p class="card-text mb-1">@SportLevel.GetSportById(eventItem.Id)</p>
+                        <p class="card-text mb-1">@eventItem.Date.ToString("MMMM dd, yyyy")</p>
+                        <p class="card-text mb-1">@eventItem.BeginningTime - @eventItem.EndTime</p>
+                        <p class="card-text mb-1">@eventItem.City, @eventItem.Location</p>
+                        <p class="card-text mb-1">
+                            @(eventItem.IsMale && eventItem.IsFemale ? "Male, Female" :
+                                                            eventItem.IsMale ? "Male" :
+                                                            eventItem.IsFemale ? "Female" : "")
+                        </p>
+                        <p class="card-text mb-1">@eventItem.CurrentPlayersNumber / @eventItem.TotalPlayers participants</p>
+                        @foreach (var level in EventSportLevels[eventItem.Id])
+                        {
+                            <span class="card-text mb-1">@SportLevel.GetSportLevelDisplayName(level.Level)</span>
+
+                            @(level != EventSportLevels[eventItem.Id].Last() ? ", " : "")
+                        }
+                        <p></p>
+                        <button class="btn btn-primary" @onclick="() => ShowEventDetails(eventItem)">View Details</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (selectedEvent != null)  
+{  
+    <div class="modal show d-block" tabindex="-1">  
+        <div class="modal-dialog">  
+            <div class="modal-content">  
+                <div class="modal-header">  
+                    <h5 class="modal-title">@selectedEvent.Name</h5>  
+                </div>  
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(joinEventMessage))
+                    {
+                        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                            @joinEventMessage
+                        </div>
+                    }
+                    <p><strong>Sport:</strong> @SportLevel.GetSportById(selectedEvent.Id)</p>
+                    <p><strong>Date:</strong> @selectedEvent.Date.ToString("MMMM dd, yyyy")</p>  
+                    <p><strong>Time:</strong> @selectedEvent.BeginningTime - @selectedEvent.EndTime</p>  
+                    <p><strong>Location:</strong> @selectedEvent.City, @selectedEvent.Location</p>
+                    <p><strong>Price:</strong> @(selectedEvent.Price > 0 ? $"€{selectedEvent.Price.Value} for person" : "Free")</p>
+                    <p><strong>Participants:</strong> @selectedEvent.CurrentPlayersNumber / @selectedEvent.TotalPlayers</p>
+                    <p><strong>Gender:</strong>  
+                        @(selectedEvent.IsMale && selectedEvent.IsFemale ? "Male, Female" :  
+                                                                          selectedEvent.IsMale ? "Male" :  
+                                                                          selectedEvent.IsFemale ? "Female" : "N/A")  
+                    </p>
+                    <span><strong>Level: </strong></span>
+                    @foreach (var level in EventSportLevels[selectedEvent.Id])
+                    {
+                        @SportLevel.GetSportLevelDisplayName(level.Level) @(level != EventSportLevels[selectedEvent.Id].Last() ? ", " : "")
+                    }
+                    <p></p>
+                    <p><strong>Private:</strong> @(selectedEvent.IsPrivateEvent ? "Yes" : "No")</p>
+                    <p><strong>Comment:</strong> @selectedEvent.Comment</p>  
+                </div>  
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-success " @onclick="() => JoinEvent(selectedEvent)">Join event</button>
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEventDetails">Close</button>  
+                </div>  
+            </div>  
+        </div>  
+    </div>  
+}  
+
+@code {
+    private IEnumerable<SportEvent> events;  
+    private SportEvent? selectedEvent;  
+    private Dictionary<int, List<SportLevel>> EventSportLevels = new();
+    private ApplicationUser? User = new();
+    private string joinEventMessage = string.Empty;
+    private string searchTerm = string.Empty;
+    private IEnumerable<SportEvent> FilteredEvents =>
+    events == null ? Enumerable.Empty<SportEvent>() :
+    events.Where(e =>
+        (string.IsNullOrWhiteSpace(searchTerm) ||
+            (!string.IsNullOrEmpty(e.Name) && e.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)))
+        &&
+        (!selectedSport.HasValue ||
+            EventSportLevels[e.Id].Any(level => level.Sport == selectedSport.Value))
+        &&
+        (!selectedLevel.HasValue ||
+            EventSportLevels[e.Id].Any(level => level.Level == selectedLevel.Value))
+    );
+    private Sports? selectedSport = null;
+    private SportLevels? selectedLevel = null;
+
+    protected override async Task OnInitializedAsync()  
+    {  
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity.IsAuthenticated)
+        {
+            User = await UserManager.GetUserAsync(user);
+
+            events = await SportEvents.GetAllActiveSportEvents();
+            var tempEvent = new List<SportEvent>();
+            foreach (var eventItem in events)
+            {
+                if (eventItem.CreatorId == Guid.Parse(User.Id))
+                {
+                    continue;
+                }
+                if (await UserSportEvents.DoesUserAndEventExist(Guid.Parse(User.Id), eventItem.Id))
+                {
+                    continue;
+                }
+                tempEvent.Add(eventItem);
+                var levels = SportLevel.GetSportLevelsByEventId(eventItem.Id);
+                EventSportLevels[eventItem.Id] = levels;
+            }
+            events = tempEvent.OrderByDescending(e => e.Date).ThenByDescending(e => e.BeginningTime).ToList();
+
+        }
+    }  
+
+    private async Task JoinEvent(SportEvent eventItem)
+    {
+        joinEventMessage = string.Empty;
+
+        if (eventItem.CurrentPlayersNumber >= eventItem.TotalPlayers)
+        {
+            joinEventMessage = "This event has reached the maximum number of participants.";
+            return;
+        }
+
+        if (!SportLevel.IsUserAndEventlevelEqual(Guid.Parse(User.Id), EventSportLevels[eventItem.Id]))
+        {
+            joinEventMessage = "Your sport level does not match the required level for this event.";
+            return;
+        }
+
+		if (await UserSportEvents.DoesUserAndEventExist(Guid.Parse(User.Id), eventItem.Id))
+		{
+			joinEventMessage = "You have already joined this event.";
+			return;
+		}
+
+        var userSportEvent = new ApplicationUserSportEvent
+        {
+            UserId = Guid.Parse(User.Id),
+            SportEventId = eventItem.Id,
+        };
+
+        await UserSportEvents.CreateUserSportEvent(userSportEvent);
+        eventItem.CurrentPlayersNumber++;
+        await SportEvents.UpdateSportEvent(eventItem);
+        Navigation.NavigateTo($"/EventInformation/{eventItem.Id}");
+    }
+
+    private void ShowEventDetails(SportEvent eventItem)  
+    {  
+        selectedEvent = eventItem;  
+    }  
+
+    private void CloseEventDetails()  
+    {  
+        selectedEvent = null;  
+        joinEventMessage = string.Empty;
+    }  
+}
+
+
+
+

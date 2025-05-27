@@ -1,0 +1,148 @@
+﻿@page "/Account/Manage/SportLevel"
+
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Identity
+@using SportEventsApp.Data
+@using SportEventsApp.Interfaces
+@using SportEventsApp.enums
+@using SportEventsApp.Models
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityUserAccessor UserAccessor
+@inject IdentityRedirectManager RedirectManager
+@inject ISportLevelRepository SportLevelRepository
+@inject IHttpContextAccessor httpContextAccessor
+
+
+<PageTitle>SportLevel</PageTitle>
+
+
+<div class="row">
+    <div class="col-xl-6">
+        <h3>Sport Level</h3>
+        <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
+            @if (showErrorMessage)
+            {
+                <div class="alert alert-info" role="alert">
+                    Please select both a Sport and a Sport Level before submitting.
+                </div>
+            }
+            <div class="form-floating mb-4">
+                <InputSelect @bind-Value="Input.Sport" id="sport" class="form-control" autocomplete="sport" aria-required="true">
+                    <option value="">Select</option>
+                    @foreach (var sport in Enum.GetValues(typeof(Sports)).Cast<Sports>().Except(userSportLevels.Select(usl => usl.Sport)))
+                    {
+                        <option value="@sport">@sport</option>
+                    }
+                </InputSelect>
+                <label for="sport">Sport</label>
+                <ValidationMessage For="() => Input.Sport" class="text-danger" />
+            </div>
+            <div class="form-floating mb-4">
+                <InputSelect @bind-Value="Input.SportLevel" id="sportLevel" class="form-control" autocomplete="SportLevel" aria-required="true">
+                   <option value="">Select</option>
+                   @foreach (var sportLevel in Enum.GetValues(typeof(SportLevels)).Cast<SportLevels>())
+                   {
+                        <option value="@sportLevel">@SportLevelRepository.GetSportLevelDisplayName(sportLevel)</option>
+                   }
+                </InputSelect>
+                <label for="sportLevel">Sport level</label>
+                <ValidationMessage For="() => Input.SportLevel" class="text-danger" />
+            </div>
+
+            <button type="submit" class="w-100 btn btn-lg btn-primary">Add</button>
+        </EditForm>
+    </div>
+    <div class="col-xl-6 d-flex justify-content-center">
+        @if (userSportLevels != null && userSportLevels.Any())
+        {
+            <div>
+                <h4><strong>Your Sport Levels:</strong></h4>
+                <ul style="list-style-type: none; padding: 0;">
+                    @foreach (var sportLevel in userSportLevels)
+                    {
+                        <li style="margin-bottom: 10px;">
+                            @sportLevel.Sport - @SportLevelRepository.GetSportLevelDisplayName(sportLevel.Level)
+                            <button class="btn btn-danger btn-sm ms-2" @onclick="() =>DeleteSportLevel(sportLevel.Id)">Delete</button>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+        else
+        {
+            <div class="">
+                You have not set any sport levels yet.
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool showErrorMessage = false;
+
+    private ApplicationUser user = default!;
+    private List<SportLevel> userSportLevels = new();
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        user = await UserAccessor.GetRequiredUserAsync(httpContextAccessor.HttpContext);
+
+        var userId = await UserManager.GetUserIdAsync(user);
+        if (userId != null)
+        {
+            userSportLevels = await SportLevelRepository.GetSportLevelsByUserId(Guid.Parse(userId));
+        }
+
+
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        if (Input.Sport == null || Input.SportLevel == null)
+        {
+            showErrorMessage = true;
+            return;
+        }
+
+        showErrorMessage = false;
+
+        var userId = await UserManager.GetUserIdAsync(user);
+
+        SportLevel newSportLevel = new SportLevel();
+
+        newSportLevel.Sport = Input.Sport.Value;
+        newSportLevel.Level = Input.SportLevel.Value;
+        if (userId != null && newSportLevel != null)
+        {
+            await SportLevelRepository.CreateSportlevel(newSportLevel, Guid.Parse(userId));
+            userSportLevels = await SportLevelRepository.GetSportLevelsByUserId(Guid.Parse(userId));
+            Input.Sport = default;
+            Input.SportLevel = default;
+        }
+    }
+
+    private async Task DeleteSportLevel(int sportLevelId)
+    {
+		Console.WriteLine("DeleteSportLevel");
+        var userId = await UserManager.GetUserIdAsync(user);
+        if (userId != null)
+        {
+            await SportLevelRepository.DeleteSportLevel(sportLevelId, Guid.Parse(userId));
+            userSportLevels = await SportLevelRepository.GetSportLevelsByUserId(Guid.Parse(userId));
+        }
+    }
+
+    private sealed class InputModel
+    {
+        public Sports? Sport{ get; set; }
+        public SportLevels? SportLevel { get; set; }
+
+    }
+}

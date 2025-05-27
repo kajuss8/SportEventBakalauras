@@ -1,0 +1,261 @@
+﻿@page "/createEvent/EventSportLevel/EventDetails"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Identity
+@using SportEventsApp.Components.Account
+@using SportEventsApp.Data
+@using SportEventsApp.Models
+@using SportEventsApp.Models.dataService
+@using SportEventsApp.enums
+@using System.ComponentModel.DataAnnotations
+
+@inject UserManager<ApplicationUser> UserManager
+@inject CreateEventData CreateEventData
+@inject IHttpContextAccessor httpContextAccessor
+@inject IdentityUserAccessor UserAccessor
+@inject NavigationManager NavigationManager
+
+<div class="row">
+    <div class="d-flex justify-content-center align-items-center">
+        <div class="col-xl-4">
+            <h3>Event Details</h3>
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="alert alert-danger" role="alert">@ErrorMessage</div>
+            }
+            <form @onsubmit="HandleSubmit">
+                <div class="form-floating mb-3">
+                    <input type="date" id="Input.EventDate" class="form-control"
+                    @bind="Input.EventDate"
+                    min="@DateTime.Now.ToString("yyyy-MM-dd")"
+                    max="@DateTime.Now.AddMonths(1).ToString("yyyy-MM-dd")" />
+                    <label for="Input.EventDate" class="form-label">Event Date</label>
+                </div>
+
+                <div class="row">
+                    <div class="col-6">
+                        <div class="form-floating mb-3">
+                            <select id="Input.StartHour" class="form-control" @bind="Input.StartHour">
+                                @for (int i = 0; i < 24; i++)
+                                {
+                                    <option value="@i">@i</option>
+                                }
+                            </select>
+                            <label for="Input.StartHour" class="form-label">Start Hour</label>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="form-floating mb-3">
+                            <select id="Input.StartMinute" class="form-control" @bind="Input.StartMinute">
+                                @for (int i = 0; i <= 59; i += 15)
+                                {
+                                    <option value="@i">@i</option>
+                                }
+                            </select>
+                            <label for="Input.StartMinute" class="form-label">Start Minute</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-6">
+                        <div class="form-floating mb-3">
+                            <select id="Input.EndHour" class="form-control" @bind="Input.EndHour">
+                                @for (int i = 0; i <= 24; i++)
+                                {
+                                    <option value="@i">@i</option>
+                                }
+                            </select>
+                            <label for="Input.EndHour" class="form-label">End Hour</label>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="form-floating mb-3">
+                            <select id="Input.EndMinute" class="form-control" @bind="Input.EndMinute">
+                                @for (int i = 0; i <= 59; i += 15)
+                                {
+                                    <option value="@i">@i</option>
+                                }
+                            </select>
+                            <label for="Input.EndMinute" class="form-label">End Minute</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-6">
+                        <div class="form-floating mb-3">
+                            <input type="number" id="Input.CurrentPlayers" class="form-control" @bind="Input.CurrentPlayers" />
+                            <label for="Input.CurrentPlayers" class="form-label">Current Players</label>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="form-floating mb-3">
+                            <input type="number" id="Input.TotalPlayers" class="form-control" @bind="Input.TotalPlayers" />
+                            <label for="Input.TotalPlayers" class="form-label">Total Players</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-check mb-3">
+                    <input type="checkbox" id="Input.GenderMale" class="form-check-input" @bind="Input.GenderMale" />
+                    <label for="Input.GenderMale" class="form-check-label">Male</label>
+                </div>
+                <div class="form-check mb-3">
+                    <input type="checkbox" id="Input.GenderFemale" class="form-check-input" @bind="Input.GenderFemale" />
+                    <label for="Input.GenderFemale" class="form-check-label">Female</label>
+                </div>
+
+                @if (CreateEventData.IsPrivate)
+                {
+                    <div class="form-floating mb-3">
+                        <input type="text" id="Input.PrivateEventCode" class="form-control" @bind="Input.Code" />
+                        <label for="Input.PrivateEventCode" class="form-label">Private Event Code</label>
+                    </div>
+                }
+
+                <button type="submit" class="w-100 btn btn-lg btn-primary">Create Event</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+@code {
+    private ApplicationUser user = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [Inject]
+    private ApplicationDbContext DbContext { get; set; } = default!;
+
+    private string ErrorMessage { get; set; } = string.Empty;
+
+    private async Task HandleSubmit()
+    {
+        if (!Input.GenderMale && !Input.GenderFemale)
+        {
+            ErrorMessage = "Please select at least one gender.";
+            return;
+        }
+
+        var startTime = new TimeSpan(Input.StartHour, Input.StartMinute, 0);
+        var endTime = new TimeSpan(Input.EndHour, Input.EndMinute, 0);
+        if (endTime <= startTime)
+        {
+            ErrorMessage = "End time must be after start time.";
+            return;
+        }
+        var today = DateTime.Now.Date;
+        var nowTime = DateTime.Now.TimeOfDay;
+
+        if (Input.EventDate.Date == today && startTime <= nowTime)
+        {
+            ErrorMessage = "Start time cannot be in the past for today's date.";
+            return;
+        }
+
+        if (Input.CurrentPlayers > Input.TotalPlayers)
+        {
+            ErrorMessage = "Current players cannot exceed total players.";
+            return;
+        }
+
+        ErrorMessage = string.Empty;
+
+        user = await UserAccessor.GetRequiredUserAsync(httpContextAccessor.HttpContext);
+        var userId = await UserManager.GetUserIdAsync(user);
+
+        var sportEvent = new SportEvent
+        {
+            Name = CreateEventData.EventName,
+            City = CreateEventData.City,
+            Location = CreateEventData.Location,
+            Price = CreateEventData.Price,
+            IsPrivateEvent = CreateEventData.IsPrivate,
+            Comment = CreateEventData.EventDescription,
+            Date = DateOnly.FromDateTime(Input.EventDate),
+            BeginningTime = new TimeOnly(Input.StartHour, Input.StartMinute),
+            EndTime = new TimeOnly(Input.EndHour, Input.EndMinute),
+            CurrentPlayersNumber = Input.CurrentPlayers,
+            TotalPlayers = Input.TotalPlayers,
+			IsMale = Input.GenderMale,
+			IsFemale = Input.GenderFemale,
+			CreatorId = Guid.Parse(userId),
+            PrivateEventCode = Input.Code,
+        };
+        await DbContext.SportEvents.AddAsync(sportEvent);
+        await DbContext.SaveChangesAsync();
+
+        await DbContext.UserSportEvents.AddAsync(new ApplicationUserSportEvent
+			{
+				UserId = Guid.Parse(userId),
+				SportEventId = sportEvent.Id,
+			});
+        await DbContext.SaveChangesAsync();
+
+        foreach (var level in CreateEventData.EventSelectedLevels)
+        {
+            var sportLevel = new SportLevel
+                {
+                    Sport = CreateEventData.Sports ?? default(Sports),
+                    Level = (SportLevels)level,
+                };
+            await DbContext.SportsLevels.AddAsync(sportLevel);
+            await DbContext.SaveChangesAsync();
+
+            await DbContext.SportEventSportLevels.AddAsync(new SportEventSportLevel
+				{
+					SportEventId = sportEvent.Id,
+					SportLevelId = sportLevel.Id,
+				});
+            await DbContext.SaveChangesAsync();
+        }
+
+        NavigationManager.NavigateTo($"/");
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "Event Date is required.")]
+        [DataType(DataType.Date)]
+        public DateTime EventDate { get; set; } = DateTime.Now;
+
+        [Required(ErrorMessage = "Start Hour is required.")]
+        public int StartHour { get; set; }
+
+        [Required(ErrorMessage = "Start Minute is required.")]
+        public int StartMinute { get; set; }
+
+        [Required(ErrorMessage = "End Hour is required.")]
+        public int EndHour { get; set; }
+
+        [Required(ErrorMessage = "End Minute is required.")]
+        public int EndMinute { get; set; }
+
+        [Required(ErrorMessage = "Current Players is required.")]
+        public int CurrentPlayers { get; set; } = 1;
+
+        [Required(ErrorMessage = "Total Players is required.")]
+        public int TotalPlayers { get; set; } = 2;
+
+        public bool GenderMale { get; set; } = true;
+
+        public bool GenderFemale { get; set; } = true;
+
+        public string? Sports { get; set; }
+        public string? EventName { get; set; }
+        public string? City { get; set; }
+        public string? Location { get; set; }
+        public double? Price { get; set; }
+        public bool IsPrivate { get; set; }
+        public string? EventDescription { get; set; }
+        [Required(ErrorMessage = "Total private event code is required.")]
+        public string? Code { get; set; }
+        public List<int>? SelectedLevels { get; set; } = new();
+	}
+}
+

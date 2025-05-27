@@ -1,0 +1,60 @@
+﻿@using Microsoft.AspNetCore.Identity
+@using SportEventsApp.Data
+
+@inject SignInManager<ApplicationUser> SignInManager
+
+<ul class="nav nav-pills flex-column">
+    <li class="nav-item">
+        <NavLink class="nav-link" href="Account/Manage" Match="NavLinkMatch.All">Profile</NavLink>
+    </li>
+    <li class="nav-item">
+        <NavLink class="nav-link" href="Account/Manage/SportLevel">Sport level</NavLink>
+    </li>
+    <li class="nav-item">
+        <NavLink class="nav-link" href="/Account/Manage/EventRequest">Event request</NavLink>
+    </li>
+    <li class="nav-item">
+        <NavLink class="nav-link" href="/Account/Manage/InviteFriend">Invite friend</NavLink>
+    </li>
+    <li class="nav-item">
+        <NavLink class="nav-link" href="Account/Manage/FriendRequest">Friend request</NavLink>
+    </li>
+    <li class="nav-item">
+        <NavLink class="nav-link" href="Account/Manage/ReportUser">Report user</NavLink>
+    </li>
+    <AuthorizeView Roles="Admin">
+        <Authorized>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="/Account/Manage/UsersInformation">
+                    <span class="oi oi-home" aria-hidden="true"></span> Users Information
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="/Account/Manage/EventsInformation">
+                    <span class="oi oi-home" aria-hidden="true"></span> Events Information
+                </NavLink>
+            </li>
+        </Authorized>
+    </AuthorizeView>
+    <li class="nav-item">
+        <NavLink class="nav-link" href="Account/Manage/ChangePassword">Password</NavLink>
+    </li>
+    @if (hasExternalLogins)
+    {
+        <li class="nav-item">
+            <NavLink class="nav-link" href="Account/Manage/ExternalLogins">External logins</NavLink>
+        </li>
+    }
+    <li class="nav-item">
+        <NavLink class="nav-link" href="Account/Manage/PersonalData">Personal data</NavLink>
+    </li>
+</ul>
+
+@code {
+    private bool hasExternalLogins;
+
+    protected override async Task OnInitializedAsync()
+    {
+        hasExternalLogins = (await SignInManager.GetExternalAuthenticationSchemesAsync()).Any();
+    }
+}

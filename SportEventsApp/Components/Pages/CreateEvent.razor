@@ -1,0 +1,116 @@
+﻿@page "/createEvent"
+@using Microsoft.AspNetCore.Identity
+@using SportEventsApp.Data
+@using SportEventsApp.enums
+@using System.ComponentModel.DataAnnotations
+@using SportEventsApp.Models.dataService
+
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
+@inject CreateEventData CreateEventData
+
+<div class="row">
+    <div class="d-flex justify-content-center align-items-center">
+        <div class="col-xl-4">
+            <h3>Create New Event</h3>
+            <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
+                <DataAnnotationsValidator />
+                <div class="form-floating mb-4">
+                    <InputSelect @bind-Value="Input.Sports" id="gender" class="form-control" autocomplete="sports" aria-required="true">
+                        <option value="">Select</option>
+                        @foreach (var sport in Enum.GetValues(typeof(Sports)))
+                        {
+                            <option value="@sport">@sport</option>
+                        }
+                    </InputSelect>
+                    <label for="sport">Sport</label>
+                    <ValidationMessage For="() => Input.Sports" class="text-danger" />
+                </div>
+                <div class="form-floating mb-3">
+                    <InputText @bind-Value="Input.EventName" id="Input.EventName" class="form-control" placeholder="Enter Event Name" />
+                    <label for="Input.EventName" class="form-label">Event Name</label>
+                    <ValidationMessage For="() => Input.EventName" class="text-danger" />
+                </div>
+                <div class="form-floating mb-3">
+                    <InputText @bind-Value="Input.City" id="Input.City" class="form-control" placeholder="Enter Event City" />
+                    <label for="Input.City" class="form-label">City</label>
+                    <ValidationMessage For="() => Input.City" class="text-danger" />
+                </div>
+                <div class="form-floating mb-3">
+                    <InputText @bind-Value="Input.Location" id="Input.Location" class="form-control" placeholder="Enter Event Location" />
+                    <label for="Input.Location" class="form-label">Location</label>
+                    <ValidationMessage For="() => Input.Location" class="text-danger" />
+                </div>
+                <div class="row">
+                    <div class="col-6">
+                        <div class="form-floating mb-3 d-flex align-items-center">
+                            <InputNumber @bind-Value="Input.Price" id="Input.Price" class="form-control" style="max-width: 150px;"/>
+                            <label for="Input.Price" class="form-label">Price</label>
+                            <span class="ms-2">€/person</span>
+                            <ValidationMessage For="() => Input.Price" class="text-danger" />
+                        </div>
+                    </div>
+                    <div class="col d-flex align-items-center justify-content-center">
+                        <InputCheckbox @bind-Value="Input.IsPrivate" id="Input.IsPrivate" class="form-check-input me-2" />
+                        <label for="Input.IsPrivate" class="form-check-label">Private</label>
+                        <ValidationMessage For="() => Input.IsPrivate" class="text-danger" />
+                    </div>
+                </div>
+                <div class="form-floating mb-3">
+                    <InputTextArea @bind-Value="Input.EventDescription" id="Input.EventDescription" class="form-control" placeholder="Enter Event Description" />
+                    <label for="Input.EventDescription" class="form-label">Description</label>
+                    <ValidationMessage For="() => Input.EventDescription" class="text-danger" />
+                </div>
+                <button type="submit" class="w-100 btn btn-lg btn-primary">Next</button>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+
+@code {
+    private ApplicationUser user = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+		CreateEventData.Sports = Input.Sports;
+        CreateEventData.EventName = Input.EventName;
+        CreateEventData.City = Input.City;
+        CreateEventData.Location = Input.Location;
+        CreateEventData.Price = Input.Price;
+		CreateEventData.IsPrivate = Input.IsPrivate;
+		CreateEventData.EventDescription = Input.EventDescription;
+        
+        NavigationManager.NavigateTo($"/createEvent/EventSportLevel");
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "Sport is required.")]
+        public Sports? Sports { get; set; }
+        [Required(ErrorMessage = "Event Name is required.")]
+		[MinLength(3, ErrorMessage = "Event name must be at least 3 characters long.")]
+		public string? EventName { get; set; }
+		[Required(ErrorMessage = "City is required.")]
+		[MinLength(3, ErrorMessage = "City must be at least 3 characters long.")]
+		public string? City { get; set; }
+		[Required(ErrorMessage = "Location is required.")]
+		[MinLength(3, ErrorMessage = "Location must be at least 3 characters long.")]
+		public string? Location { get; set; }
+		public double? Price { get; set; } = 0;
+		public bool IsPrivate { get; set; } = false;
+		public string? EventDescription { get; set; }
+	}
+}
+

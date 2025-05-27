@@ -1,0 +1,127 @@
+﻿@page "/Account/Manage"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using SportEventsApp.Attributes
+@using SportEventsApp.Data
+@using SportEventsApp.enums
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityUserAccessor UserAccessor
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Profile</PageTitle>
+
+<h3>Profile</h3>
+
+<div class="row">
+    <div class="col-xl-6">
+        <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert" />
+            <StatusMessage/>
+            <div class="form-floating mb-3">
+                <input type="text" value="@username" id="username" class="form-control" placeholder="Choose your username." disabled />
+                <label for="username" class="form-label">Email</label>
+            </div>
+            <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.FullName" id="Input.FullName" class="form-control" placeholder="Enter your full name" />
+                <label for="Input.FullName" class="form-label">Name</label>
+                <ValidationMessage For="() => Input.FullName" class="text-danger" />
+            </div>
+            <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.City" id="Input.City" class="form-control" placeholder="Enter your city" />
+                <label for="Input.City" class="form-label">City</label>
+                <ValidationMessage For="() => Input.City" class="text-danger" />
+            </div>
+            <div class="form-floating mb-3">
+                <InputDate @bind-Value="Input.DateOfBirth" id="date-of-birth" class="form-control" placeholder="Enter your date of birth" />
+                <label for="date-of-birth">Date Of Birth</label>
+                <ValidationMessage For="() => Input.DateOfBirth" class="text-danger" />
+            </div>
+            <div class="form-floating mb-4">
+                <InputSelect @bind-Value="Input.Gender" id="gender" class="form-control" autocomplete="gender" aria-required="true">
+                    @foreach (var gender in Enum.GetValues(typeof(Genders)))
+                    {
+                        <option value="@gender">@gender</option>
+                    }
+                </InputSelect>
+                <label for="gender">Gender</label>
+                <ValidationMessage For="() => Input.Gender" class="text-danger" />
+            </div>
+            <button type="submit" class="w-100 btn btn-lg btn-primary">Save</button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private ApplicationUser user = default!;
+    private string? username;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = await UserAccessor.GetRequiredUserAsync(HttpContext);
+        username = await UserManager.GetUserNameAsync(user);
+
+        Input.FullName ??= user.FullName;
+        Input.City ??= user.City;
+        Input.DateOfBirth ??= user.DateOfBirth;
+        Input.Gender ??= user.Gender;
+
+        
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        if (Input.FullName != null && Input.FullName != user.FullName)
+        {
+            user.FullName = Input.FullName;
+        }
+
+        if (Input.City != null && Input.City != user.City)
+        {
+            user.City = Input.City;
+        }
+
+        if (Input.DateOfBirth.HasValue && Input.DateOfBirth.Value != user.DateOfBirth)
+        {
+            user.DateOfBirth = Input.DateOfBirth.Value;
+        }
+
+        if (Input.Gender.HasValue && Input.Gender.Value != user.Gender)
+        {
+            user.Gender = Input.Gender.Value;
+        }
+
+        var result = await UserManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus("Error: Failed to set full name.", HttpContext);
+            return;
+        }
+
+        await SignInManager.RefreshSignInAsync(user);
+        RedirectManager.RedirectToCurrentPageWithStatus("Your profile has been updated", HttpContext);
+    }
+
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "Full Name is required.")]
+        [MinLength(5, ErrorMessage = "Full Name must be at least 5 characters long.")]
+        public string? FullName { get; set; }
+        public string? City { get; set; }
+        [Required(ErrorMessage = "Date of Birth is required.")]
+        [DateOfBirth]
+        public DateOnly? DateOfBirth { get; set; }
+        [Required(ErrorMessage = "Gender is required.")]
+        public Genders? Gender { get; set; }
+
+    }
+}
