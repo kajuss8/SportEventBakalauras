@@ -47,9 +47,9 @@ Our goal is to provide a specialized, user-friendly platform that enables users 
 3. **Set Up the Database**:
    - Update the connection string in appsettings.json to point to your database.
    - Run migrations to set up the database schema:
-     ```bash
-     dotnet ef migrations add InitialCreate
-     dotnet ef database update
+   ```bash
+   dotnet ef migrations add InitialCreate
+   dotnet ef database update
 
 4. **Configure the AI Chatbot**:
    - Install the .NET AI Template: dotnet new install Microsoft.Extensions.AI.Templates.
