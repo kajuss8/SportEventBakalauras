@@ -1,7 +1,7 @@
 # SportMeet
 
 ## Overview
-SportSync Events is a web application built using **ASP.NET Blazor** and **C#**, designed to streamline the organization and discovery of sports events. The platform addresses the challenges of participant shortages and inefficient event organization often encountered in social media groups, such as those on Facebook, where advertisements and irrelevant messages complicate coordination.
+SportMeet is a web application built using **ASP.NET Blazor** and **C#**, designed to streamline the organization and discovery of sports events. The platform addresses the challenges of participant shortages and inefficient event organization often encountered in social media groups, such as those on Facebook, where advertisements and irrelevant messages complicate coordination.
 
 Our goal is to provide a specialized, user-friendly platform that enables users to:
 - Easily **find** sports events.
