@@ -66,4 +66,4 @@ Our goal is to provide a specialized, user-friendly platform that enables users 
    ```bash
    dotnet run
 
-Open your browser and navigate to https://localhost:7040/ (or the port specified in your configuration).
+Open your browser and navigate to https://localhost:7040 (or the port specified in your configuration).
